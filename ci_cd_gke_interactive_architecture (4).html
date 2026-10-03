@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CI/CD 與 GKE 叢集自動化調度架構圖</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Mermaid.js CDN for reliable dynamic rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        gcp: {
+                            blue: '#1a73e8',
+                            bluelight: '#e8f0fe',
+                            yellow: '#f9ab00',
+                            yellowlight: '#fef7e0',
+                            green: '#1e8e3e',
+                            greenlight: '#e6f4ea',
+                            gray: '#5f6368',
+                            graylight: '#f1f3f4',
+                            dark: '#202124'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+
+        /* Dot grid canvas background */
+        .bg-grid-pattern {
+            background-size: 24px 24px;
+            background-image: radial-gradient(circle, #cbd5e1 1.2px, transparent 1.2px);
+        }
+
+        /* Mermaid custom tweaks */
+        .mermaid svg {
+            max-width: 100% !important;
+            height: auto !important;
+            font-family: 'Inter', sans-serif !important;
+        }
+
+        /* Interactive node hover feedback */
+        .mermaid .node {
+            cursor: pointer !important;
+            transition: all 0.25s ease-in-out !important;
+        }
+
+        .mermaid .node:hover {
+            filter: drop-shadow(0 0 10px rgba(26, 115, 232, 0.45)) !important;
+            opacity: 0.95;
+        }
+
+        /* Code block scrollbars */
+        pre::-webkit-scrollbar {
+            height: 6px;
+            width: 6px;
+        }
+        pre::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+
+        /* Subtle pulse for hint badges */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .pulse-subtle {
+            animation: pulse-ring 3s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 flex flex-col justify-between selection:bg-blue-100 selection:text-blue-700">
+
+    <!-- Top Header -->
+    <header class="bg-white/95 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center justify-center p-2 bg-blue-50 text-blue-600 rounded-lg ring-1 ring-blue-100">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+                        </svg>
+                    </span>
+                    <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                        CI/CD 與 GKE 叢集自動化調度架構圖
+                    </h1>
+                </div>
+                <div class="h-1 w-28 bg-gradient-to-r from-blue-600 via-indigo-500 to-sky-400 rounded-full mt-2"></div>
+            </div>
+            
+            <div class="flex flex-wrap items-center gap-2 text-xs sm:text-sm">
+                <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-200/60 shadow-xs pulse-subtle">
+                    <span class="w-2 h-2 rounded-full bg-blue-600 animate-ping"></span>
+                    💡 點擊下方架構節點查看運作原理與指令
+                </span>
+                <button onclick="resetZoom()" class="px-3 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition text-xs font-semibold flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    適配畫布
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 flex flex-col gap-6">
+
+        <!-- Stage Summary Badges -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div class="flex items-center gap-3 p-3 bg-white rounded-xl border border-slate-200/90 shadow-2xs hover:border-slate-300 transition">
+                <div class="w-4 h-4 rounded-full bg-[#cbd5e1] border-2 border-slate-500 flex-shrink-0"></div>
+                <div>
+                    <div class="text-xs font-semibold text-slate-500 uppercase tracking-wider">階段一</div>
+                    <div class="text-sm font-bold text-slate-800">本地打包與驗證 (Docker)</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 bg-white rounded-xl border border-amber-200/80 shadow-2xs bg-amber-50/20 hover:border-amber-300 transition">
+                <div class="w-4 h-4 rounded-full bg-[#fde68a] border-2 border-amber-500 flex-shrink-0"></div>
+                <div>
+                    <div class="text-xs font-semibold text-amber-700 uppercase tracking-wider">階段二</div>
+                    <div class="text-sm font-bold text-slate-800">雲端製品託管 (Artifact Registry)</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-3 p-3 bg-white rounded-xl border border-blue-200/80 shadow-2xs bg-blue-50/20 hover:border-blue-300 transition">
+                <div class="w-4 h-4 rounded-full bg-[#bfdbfe] border-2 border-blue-600 flex-shrink-0"></div>
+                <div>
+                    <div class="text-xs font-semibold text-blue-700 uppercase tracking-wider">階段三</div>
+                    <div class="text-sm font-bold text-slate-800">GKE 自動化調度與對外公開</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive Architecture Diagram Canvas -->
+        <div class="relative bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
+            <!-- Canvas Toolbar -->
+            <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50/80 border-b border-slate-200 text-xs text-slate-500">
+                <span class="flex items-center gap-2 font-mono">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    Topology Canvas: Interactive View
+                </span>
+                <span class="hidden sm:inline-block text-slate-400">支援點選任意節點查看職責與 Lab 實戰指令</span>
+            </div>
+
+            <!-- Top-left Title in Canvas Area -->
+            <div class="absolute top-12 left-5 z-10 hidden sm:flex items-center gap-2.5 pointer-events-none bg-white/95 backdrop-blur-md px-5 py-3.5 rounded-xl border border-slate-200 shadow-md">
+                <span class="w-3 h-3 rounded-full bg-blue-600 ring-4 ring-blue-100 flex-shrink-0"></span>
+                <h2 class="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
+                    CI/CD 與 GKE 叢集自動化調度架構圖
+                </h2>
+            </div>
+
+            <!-- Diagram Scroll Wrapper -->
+            <div id="diagram-container" class="bg-grid-pattern p-4 sm:p-8 overflow-x-auto min-h-[580px] flex items-center justify-center">
+                <div class="mermaid text-center w-full" id="mermaid-graph">
+flowchart TB
+    %% 階段一：本地建置與驗證
+    subgraph Phase1 ["  階段一：本地打包與驗證 (Docker)  "]
+        direction TB
+        Code["<b>原始碼 (Source Code)</b><br/>Golang App 程式庫"]
+        Build["<b>Dockerfile 定義與建置</b><br/>不可變環境封裝 (docker build)"]
+        LocalImg["<b>本機映像檔 (Local Image)</b><br/>valkyrie-prod:v0.0.3"]
+        LocalTest["<b>本機容器冒煙測試</b><br/>-p 8080:8080 (curl 驗證)"]
+
+        Code -->|"定義建置規格"| Build
+        Build -->|"編譯生成"| LocalImg
+        LocalImg -->|"docker run 啟動"| LocalTest
+    end
+
+    %% 階段二：雲端製品託管
+    subgraph Phase2 ["  階段二：雲端製品託管 (Artifact Registry)  "]
+        direction TB
+        Tag["<b>docker tag</b><br/>賦予 FQIN 完整雲端路徑"]
+        Push["<b>docker push</b><br/>gcloud 認證並推播上傳"]
+        Reg[("<b>Artifact Registry 儲存庫</b><br/>單一真理來源 / 安全版本庫")]
+
+        Tag -->|"配置授權"| Push
+        Push -->|"保存映像檔"| Reg
+    end
+
+    %% 階段三：Kubernetes 編排與暴露
+    subgraph Phase3 ["  階段三：GKE 叢集自動化調度與對外公開  "]
+        direction TB
+        
+        %% Service 區塊
+        subgraph SvcGroup ["  Service (流量管理與入口)  "]
+            SVC["<b>Service (LoadBalancer)</b><br/>申請 Google Cloud 外部 Public IP"]
+            Selector["<b>Label Selector 與 Endpoints</b><br/>比對條件: app=valkyrie-dev"]
+            SVC --- Selector
+        end
+
+        %% Deployment 區塊
+        subgraph DepGroup ["  Deployment (生命週期與自癒)  "]
+            DEP["<b>Deployment 控制器</b><br/>宣告期望狀態 (Replicas: 1) / 故障自癒"]
+            Spec["<b>Pod Template 規格書</b><br/>映像檔路徑 + Labels: app=valkyrie-dev"]
+            DEP --- Spec
+        end
+
+        %% 運算實體
+        subgraph PodGroup ["  核心運算實體  "]
+            POD["<b>實體 Pod (Container 執行載體)</b><br/>執行 Go App 容器 (Port 8080)<br/>帶有標籤: app=valkyrie-dev"]
+        end
+
+        DEP -->|"持續監控並調度"| POD
+        Selector ===>|"動態匹配 Endpoints 轉發"| POD
+    end
+
+    %% 跨階段串聯
+    LocalTest -.->|"本地確認正常後打標籤"| Tag
+    Reg ==>|"GKE Node 拉取映像檔 (Pull)"| POD
+    ExtUser([<b>外部使用者 / 終端 Client</b>]) -->|"HTTPS/HTTP 存取 Public IP"| SVC
+
+    %% 樣式設定
+    classDef phase1Style fill:#F8F9FA,stroke:#94A3B8,stroke-width:1.5px,color:#1E293B;
+    classDef phase2Style fill:#FEF7E0,stroke:#F59E0B,stroke-width:1.5px,color:#78350F;
+    classDef phase3Style fill:#EFF6FF,stroke:#3B82F6,stroke-width:2px,color:#1E3A8A;
+    classDef podHighlight fill:#DCFCE7,stroke:#16A34A,stroke-width:2.5px,color:#14532D;
+    classDef clientStyle fill:#FFFFFF,stroke:#64748B,stroke-width:2px,color:#0F172A;
+
+    class Phase1 phase1Style;
+    class Phase2 phase2Style;
+    class Phase3 phase3Style;
+    class POD podHighlight;
+    class ExtUser clientStyle;
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="border-t border-slate-200 bg-white py-4 mt-8">
+        <div class="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
+            雲端原生架構解析模型 • 適用於 GKE / Kubernetes CI/CD 觀念展示與學習複盤
+        </div>
+    </footer>
+
+    <!-- Dynamic Detail Modal (Centered on all screens for optimal reading) -->
+    <div id="modalBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden opacity-0 transition-opacity duration-200" onclick="closeModal()"></div>
+    
+    <div id="nodeModal" class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] sm:w-[85vw] max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 hidden opacity-0 scale-95 transition-all duration-200 max-h-[85vh] flex flex-col">
+
+        <!-- Modal Header -->
+        <div class="px-5 sm:px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/90 rounded-t-2xl sticky top-0 z-10">
+            <div class="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+                <span id="modalStageBadge" class="px-2.5 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                    階段類別
+                </span>
+                <h3 id="modalTitle" class="text-base sm:text-lg font-bold text-slate-900">
+                    節點名稱
+                </h3>
+            </div>
+            <button onclick="closeModal()" aria-label="Close" class="w-8 h-8 rounded-full hover:bg-slate-200/80 text-slate-500 hover:text-slate-800 flex items-center justify-center transition text-base font-semibold">
+                ✕
+            </button>
+        </div>
+
+        <!-- Modal Body (Smooth scrolling, code block immediately visible) -->
+        <div class="p-5 sm:p-6 overflow-y-auto space-y-4 text-sm flex-1 overscroll-contain">
+            
+            <!-- Section 1: Concept & Description -->
+            <div>
+                <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <span>📝</span> 節點運作說明與關鍵概念
+                </h4>
+                <div id="modalDesc" class="p-3.5 bg-slate-50 rounded-xl text-slate-700 leading-relaxed border border-slate-200/60">
+                    說明內容載入中...
+                </div>
+            </div>
+
+            <!-- Section 2: Why do we need it? -->
+            <div>
+                <h4 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                    <span>💡</span> 為什麼需要這個元件？（架構目的）
+                </h4>
+                <div id="modalWhy" class="p-3.5 bg-blue-50/60 rounded-xl text-blue-900 leading-relaxed border border-blue-100 font-medium">
+                    架構目的內容載入中...
+                </div>
+            </div>
+
+            <!-- Section 3: Expandable / Collapsible Code Block (Comfortable Light Theme) -->
+            <div id="codeContainerWrapper" class="border border-slate-200 rounded-xl overflow-hidden hidden bg-slate-50/70">
+                <div class="px-4 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between">
+                    <button onclick="toggleCodeVisibility()" id="toggleCodeBtn" class="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-blue-600 transition focus:outline-none">
+                        <span id="toggleCodeIcon" class="inline-block transition-transform duration-200 text-[10px]">▶</span>
+                        <span id="toggleCodeText">展開實作指令 / 配置設定</span>
+                    </button>
+                    <button onclick="copyModalCode()" id="copyCodeBtn" class="hidden px-2.5 py-1 rounded bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium border border-slate-200 transition flex items-center gap-1 shadow-2xs">
+                        <span>📋</span> 複製
+                    </button>
+                </div>
+                <div id="codeContentArea" class="hidden bg-[#f8fafc] p-4 border-t border-slate-200/80">
+                    <pre><code id="modalCode" class="text-xs text-slate-800 font-mono block whitespace-pre overflow-x-auto leading-relaxed selection:bg-blue-100"># Command or YAML here</code></pre>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Modal Footer -->
+        <div class="px-5 sm:px-6 py-3 bg-slate-50 border-t border-slate-100 flex justify-end rounded-b-2xl">
+            <button onclick="closeModal()" class="w-full sm:w-auto px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold transition shadow-xs text-center">
+                關閉視窗
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // 精準對應 Lab 與 Challenge Lab 實作指令的節點資料字典
+        const NODE_DATA = {
+            'code': {
+                name: '原始碼 (Source Code)',
+                stage: '階段一｜本地打包與驗證',
+                stageColor: 'bg-slate-100 text-slate-700 border border-slate-300',
+                desc: 'Golang 應用程式原始碼庫。在 Lab 中，程式碼存放在 ~/valkyrie-app/source 目錄下，包含應用主程式與相依套件。',
+                why: '一切雲端微服務的起點。必須透過標準化定義，才能將業務邏輯封裝為無狀態（Stateless）的容器化執行個體。',
+                code: `# 下載並解壓縮應用程式原始碼
+gcloud storage cp gs://spls/gsp318/valkyrie-app.tgz .
+tar -xzf valkyrie-app.tgz
+cd valkyrie-app
+ls -la source/`
+            },
+            'build': {
+                name: 'Dockerfile 定義與建置',
+                stage: '階段一｜本地打包與驗證',
+                stageColor: 'bg-slate-100 text-slate-700 border border-slate-300',
+                desc: '撰寫 Dockerfile 宣告編譯基底（golang:1.10）、工作路徑、編譯指令與容器啟動進入點（監聽 8080 埠），並執行 docker build。',
+                why: '建立不可變基礎設施（Immutable Infrastructure），將作業系統與依賴全部封裝，徹底解決「在我的電腦可以跑、別人電腦壞掉」的交付痛點。',
+                code: `# 建立 Dockerfile
+cat << 'EOF' > Dockerfile
+FROM golang:1.10
+WORKDIR /go/src/app
+COPY source .
+RUN go install -v
+ENTRYPOINT ["app","-single=true","-port=8080"]
+EOF
+
+# 建置映像檔並標記名稱與版本
+docker build -t valkyrie-prod:v0.0.3 .`
+            },
+            'localimg': {
+                name: '本機映像檔 (Local Image)',
+                stage: '階段一｜本地打包與驗證',
+                stageColor: 'bg-slate-100 text-slate-700 border border-slate-300',
+                desc: '建置完成後儲存於本機 Docker Daemon 的映像檔（valkyrie-prod:v0.0.3）。',
+                why: '作為本機冒煙測試的基底。確認映像檔已存在於本地 Docker 儲存庫後，方能進行下一步容器啟動與遠端標記。',
+                code: `# 驗證本地建置完成的映像檔
+docker images`
+            },
+            'localtest': {
+                name: '本機容器冒煙測試',
+                stage: '階段一｜本地打包與驗證',
+                stageColor: 'bg-slate-100 text-slate-700 border border-slate-300',
+                desc: '執行 docker run 將本地 Port 8080 與容器內部 Port 8080 進行網路連接埠映射（Port Mapping），並透過 curl 驗證 HTTP 回應。',
+                why: '冒煙測試（Smoke Test）保證：在把映像檔推送到雲端生產環境前，先百分之百確認程式不會在啟動時崩潰且 HTTP 回應正常。',
+                code: `# 背景執行本機容器並映射 8080 埠號
+docker run -d -p 8080:8080 --name valkyrie-app valkyrie-prod:v0.0.3
+
+# 測試連線確認有回傳 HTML 網頁
+curl http://localhost:8080`
+            },
+            'tag': {
+                name: 'docker tag (賦予 FQIN 標籤)',
+                stage: '階段二｜雲端製品託管',
+                stageColor: 'bg-amber-100 text-amber-800 border border-amber-300',
+                desc: '將本地 Image 賦予包含雲端地域、專案 ID 與倉庫名稱的完整路徑名稱（Fully Qualified Image Name, FQIN）。',
+                why: 'Docker 預設會推往公有 Docker Hub。必須貼上 Google Cloud 專屬網域名稱標籤，Docker 才能正確定位上傳的目的地。',
+                code: `# 取得當前專案 ID 並重新標記 Image
+export PROJECT_ID=$(gcloud config get-value project)
+
+docker tag valkyrie-prod:v0.0.3 \\
+  us-east4-docker.pkg.dev/$PROJECT_ID/valkyrie-repository/valkyrie-prod:v0.0.3`
+            },
+            'push': {
+                name: 'docker push (上傳製品)',
+                stage: '階段二｜雲端製品託管',
+                stageColor: 'bg-amber-100 text-amber-800 border border-amber-300',
+                desc: '透過 gcloud 授權憑證協助工具（Credential Helper），將打好標籤的映像檔各層（Layers）上傳至 Artifact Registry。',
+                why: '將光碟製品由個人電腦傳送到雲端中央倉庫，讓分散在多個機房的 GKE 節點具備網路存取與拉取執行的權限。',
+                code: `# 設定 gcloud 身分認證並推播
+gcloud auth configure-docker us-east4-docker.pkg.dev --quiet
+
+docker push us-east4-docker.pkg.dev/$PROJECT_ID/valkyrie-repository/valkyrie-prod:v0.0.3`
+            },
+            'reg': {
+                name: 'Artifact Registry 儲存庫',
+                stage: '階段二｜雲端製品託管',
+                stageColor: 'bg-amber-100 text-amber-800 border border-amber-300',
+                desc: 'Google Cloud 託管的高可用 Docker 容器儲存庫，具備 IAM 存取控制、版本歷史與弱點掃描機制。',
+                why: '作為分散式系統的「單一真理來源（Single Source of Truth）」。當節點故障轉移自癒時，所有機器都能從同一個倉庫拉取相同的映像檔。',
+                code: `# 在 us-east4 建立 Artifact Registry 儲存庫
+gcloud artifacts repositories create valkyrie-repository \\
+    --repository-format=docker \\
+    --location=us-east4 \\
+    --description="Docker repository for valkyrie"`
+            },
+            'svc': {
+                name: 'Service (Type: LoadBalancer)',
+                stage: '階段三｜GKE 自動化調度',
+                stageColor: 'bg-blue-100 text-blue-800 border border-blue-300',
+                desc: 'K8s 網路門戶物件。宣告為 LoadBalancer 類型時，GKE 會向 Google Cloud 申請並綁定一個對外的實體公網 IP。',
+                why: 'Pod 是消耗品，重開機 IP 就會更動。Service 為後端 Pod 提供固定不變的存取入口，並對網際網路提供負載平衡轉發。',
+                code: `# 部署 Service 並查詢公開 IP
+kubectl create -f service.yaml
+
+# 檢查 Service 狀態 (等待 EXTERNAL-IP 出現)
+kubectl get services`
+            },
+            'selector': {
+                name: 'Label Selector 與 Endpoints',
+                stage: '階段三｜GKE 自動化調度',
+                stageColor: 'bg-blue-100 text-blue-800 border border-blue-300',
+                desc: 'Service 不死記 Pod 的 IP，而是透過 spec.selector 條件（如 app=valkyrie-dev）動態過濾並維護 Endpoints 清單。',
+                why: '實現架構的「鬆散耦合（Loose Coupling）」。只要 Pod 貼有相符標籤，就會瞬間被自動納入流量轉發清單；漏貼標籤則立即被排除。',
+                code: `# 檢查 Service 是否成功比對到 Pod 的內部私有 IP
+kubectl get endpoints valkyrie-dev
+kubectl describe services valkyrie-dev`
+            },
+            'dep': {
+                name: 'Deployment 控制器',
+                stage: '階段三｜GKE 自動化調度',
+                stageColor: 'bg-blue-100 text-blue-800 border border-blue-300',
+                desc: '負責監管 Pod 期望狀態（Desired State）的工頭。透過 ReplicaSet 確保指定數量的 Pod 始終健康運作。',
+                why: '告別人工維護。當實體 VM 當機或 Pod 內部發生崩潰，Deployment 會自動在健康節點上重啟新 Pod，達成秒級自癒（Self-Healing）。',
+                code: `# 更新 deployment.yaml 的映像檔路徑並部署
+cd ~/valkyrie-app/k8s
+sed -i "s|image: .*|image: us-east4-docker.pkg.dev/$PROJECT_ID/valkyrie-repository/valkyrie-prod:v0.0.3|g" deployment.yaml
+
+kubectl create -f deployment.yaml
+kubectl get deployments`
+            },
+            'spec': {
+                name: 'Pod Template 規格書',
+                stage: '階段三｜GKE 自動化調度',
+                stageColor: 'bg-blue-100 text-blue-800 border border-blue-300',
+                desc: '定義在 deployment.yaml 內的 spec.template 區塊，記錄了拉取映像檔的雲端網址、資源限制（Limits）與 Label 標籤（app: valkyrie-dev）。',
+                why: '規範未來所有自動繁衍出的 Pod 副本之標準原型，確保每一次擴容或自癒重啟的 Pod 配置皆精準一致。',
+                code: `# 查看 deployment.yaml 內定義的範本規格
+cat deployment.yaml`
+            },
+            'pod': {
+                name: '實體 Pod (Container 載體)',
+                stage: '階段三｜核心運算實體',
+                stageColor: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+                desc: 'Kubernetes 的最小計算排程單元。本體由 GKE 工作節點（Node）的 kubelet 向 Artifact Registry 拉取 Image 所啟動。',
+                why: '真實承載業務流量的打工仔。具備暫時性（Ephemeral）與不可靠性，隨時可被替換，但透過與 Service 協同達成高可用。',
+                code: `# 查看 Pod 詳細狀態、所屬 Node 與私有 IP
+kubectl get pods -l app=valkyrie-dev -o wide
+
+# 即時查看容器內部日誌
+kubectl logs -l app=valkyrie-dev`
+            },
+            'extuser': {
+                name: '外部使用者 (Client)',
+                stage: '外部存取層',
+                stageColor: 'bg-slate-100 text-slate-800 border border-slate-300',
+                desc: '網際網路上的使用者瀏覽器、API 客戶端或終端 curl 指令。',
+                why: '所有微服務建置的終極目的。外部請求只會知道 LoadBalancer 的公開 IP，完全感知不到叢集內部各節點與 Pod 的拓撲細節。',
+                code: `# 外部存取測試命令 (以 Public IP 存取)
+curl http://<EXTERNAL-IP>`
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', function () {
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'neutral',
+                securityLevel: 'loose',
+                flowchart: {
+                    htmlLabels: true,
+                    curve: 'basis',
+                    useMaxWidth: false
+                }
+            });
+
+            setTimeout(bindMermaidClicks, 600);
+        });
+
+        function bindMermaidClicks() {
+            const svgNodes = document.querySelectorAll('.mermaid svg .node');
+            
+            svgNodes.forEach(node => {
+                node.style.cursor = 'pointer';
+                node.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const text = this.textContent || '';
+                    const id = this.id || '';
+                    handleNodeClick(id, text);
+                });
+            });
+        }
+
+        function handleNodeClick(rawId, textContent) {
+            const query = (rawId + ' ' + textContent).toLowerCase();
+            let key = null;
+
+            if (query.includes('localimg') || query.includes('本機映像檔')) key = 'localimg';
+            else if (query.includes('localtest') || query.includes('本機容器冒煙測試')) key = 'localtest';
+            else if (query.includes('build') || query.includes('dockerfile')) key = 'build';
+            else if (query.includes('code') || query.includes('原始碼')) key = 'code';
+            else if (query.includes('tag') || query.includes('docker tag')) key = 'tag';
+            else if (query.includes('push') || query.includes('docker push')) key = 'push';
+            else if (query.includes('reg') || query.includes('artifact registry')) key = 'reg';
+            else if (query.includes('selector') || query.includes('endpoints')) key = 'selector';
+            else if (query.includes('svc') || query.includes('loadbalancer')) key = 'svc';
+            else if (query.includes('spec') || query.includes('template')) key = 'spec';
+            else if (query.includes('dep') || query.includes('deployment')) key = 'dep';
+            else if (query.includes('pod') || query.includes('實體 pod')) key = 'pod';
+            else if (query.includes('extuser') || query.includes('外部使用者') || query.includes('client')) key = 'extuser';
+
+            if (key && NODE_DATA[key]) {
+                openModal(NODE_DATA[key]);
+            }
+        }
+
+        let currentModalCode = '';
+        let isCodeExpanded = false;
+
+        function toggleCodeVisibility() {
+            isCodeExpanded = !isCodeExpanded;
+            const contentArea = document.getElementById('codeContentArea');
+            const icon = document.getElementById('toggleCodeIcon');
+            const text = document.getElementById('toggleCodeText');
+            const copyBtn = document.getElementById('copyCodeBtn');
+
+            if (isCodeExpanded) {
+                contentArea.classList.remove('hidden');
+                copyBtn.classList.remove('hidden');
+                icon.innerText = '▼';
+                text.innerText = '收合實作指令 / 配置設定';
+            } else {
+                contentArea.classList.add('hidden');
+                copyBtn.classList.add('hidden');
+                icon.innerText = '▶';
+                text.innerText = '展開實作指令 / 配置設定';
+            }
+        }
+
+        function openModal(data) {
+            const backdrop = document.getElementById('modalBackdrop');
+            const modal = document.getElementById('nodeModal');
+            const codeContainerWrapper = document.getElementById('codeContainerWrapper');
+
+            document.getElementById('modalTitle').innerText = data.name;
+            document.getElementById('modalStageBadge').innerText = data.stage;
+            document.getElementById('modalStageBadge').className = `px-2.5 py-1 text-xs font-semibold rounded-full ${data.stageColor}`;
+            document.getElementById('modalDesc').innerText = data.desc;
+            document.getElementById('modalWhy').innerText = data.why;
+
+            // 重設代碼展開/收合狀態，預設為收合，讓使用者自主決定
+            isCodeExpanded = false;
+            document.getElementById('codeContentArea').classList.add('hidden');
+            document.getElementById('copyCodeBtn').classList.add('hidden');
+            document.getElementById('toggleCodeIcon').innerText = '▶';
+            document.getElementById('toggleCodeText').innerText = '展開實作指令 / 配置設定';
+
+            // 若該節點有指令/配置代碼則顯示區塊，無代碼則完全隱藏
+            if (data.code && data.code.trim() !== '') {
+                codeContainerWrapper.classList.remove('hidden');
+                document.getElementById('modalCode').innerText = data.code;
+                currentModalCode = data.code;
+            } else {
+                codeContainerWrapper.classList.add('hidden');
+                currentModalCode = '';
+            }
+
+            // 鎖定背景滾動，並以居中動效彈出
+            document.body.style.overflow = 'hidden';
+            backdrop.classList.remove('hidden');
+            modal.classList.remove('hidden');
+
+            setTimeout(() => {
+                backdrop.classList.remove('opacity-0');
+                modal.classList.remove('opacity-0', 'scale-95');
+                modal.classList.add('opacity-100', 'scale-100');
+            }, 10);
+        }
+
+        function closeModal() {
+            const backdrop = document.getElementById('modalBackdrop');
+            const modal = document.getElementById('nodeModal');
+
+            backdrop.classList.add('opacity-0');
+            modal.classList.remove('opacity-100', 'scale-100');
+            modal.classList.add('opacity-0', 'scale-95');
+
+            setTimeout(() => {
+                backdrop.classList.add('hidden');
+                modal.classList.add('hidden');
+                document.body.style.overflow = '';
+            }, 200);
+        }
+
+        function copyModalCode() {
+            const btn = document.getElementById('copyCodeBtn');
+            const tempTextarea = document.createElement('textarea');
+            tempTextarea.value = currentModalCode;
+            document.body.appendChild(tempTextarea);
+            tempTextarea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextarea);
+
+            btn.innerHTML = '<span>✔</span> 已複製！';
+            btn.classList.add('bg-emerald-50', 'text-emerald-700', 'border-emerald-300');
+            setTimeout(() => {
+                btn.innerHTML = '<span>📋</span> 複製';
+                btn.classList.remove('bg-emerald-50', 'text-emerald-700', 'border-emerald-300');
+            }, 2000);
+        }
+
+        function resetZoom() {
+            const container = document.getElementById('diagram-container');
+            container.scrollTo({
+                left: (container.scrollWidth - container.clientWidth) / 2,
+                behavior: 'smooth'
+            });
+        }
+    </script>
+</body>
+</html>
