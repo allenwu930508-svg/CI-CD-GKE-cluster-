@@ -57,9 +57,10 @@
             font-family: 'Inter', sans-serif !important;
         }
 
-        /* Interactive node hover feedback */
+        /* Interactive node hover feedback & force pointer */
         .mermaid .node {
             cursor: pointer !important;
+            pointer-events: all !important;
             transition: all 0.25s ease-in-out !important;
         }
 
@@ -251,7 +252,7 @@ flowchart TB
         </div>
     </footer>
 
-    <!-- Dynamic Detail Modal (Centered on all screens for optimal reading) -->
+    <!-- Dynamic Detail Modal -->
     <div id="modalBackdrop" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 hidden opacity-0 transition-opacity duration-200" onclick="closeModal()"></div>
     
     <div id="nodeModal" class="fixed z-50 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92vw] sm:w-[85vw] max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 hidden opacity-0 scale-95 transition-all duration-200 max-h-[85vh] flex flex-col">
@@ -271,7 +272,7 @@ flowchart TB
             </button>
         </div>
 
-        <!-- Modal Body (Smooth scrolling, code block immediately visible) -->
+        <!-- Modal Body -->
         <div class="p-5 sm:p-6 overflow-y-auto space-y-4 text-sm flex-1 overscroll-contain">
             
             <!-- Section 1: Concept & Description -->
@@ -294,7 +295,7 @@ flowchart TB
                 </div>
             </div>
 
-            <!-- Section 3: Expandable / Collapsible Code Block (Comfortable Light Theme) -->
+            <!-- Section 3: Expandable / Collapsible Code Block -->
             <div id="codeContainerWrapper" class="border border-slate-200 rounded-xl overflow-hidden hidden bg-slate-50/70">
                 <div class="px-4 py-2.5 bg-slate-100/90 border-b border-slate-200 flex items-center justify-between">
                     <button onclick="toggleCodeVisibility()" id="toggleCodeBtn" class="flex items-center gap-2 text-xs font-bold text-slate-700 hover:text-blue-600 transition focus:outline-none">
@@ -321,7 +322,6 @@ flowchart TB
     </div>
 
     <script>
-        // 精準對應 Lab 與 Challenge Lab 實作指令的節點資料字典
         const NODE_DATA = {
             'code': {
                 name: '原始碼 (Source Code)',
@@ -476,34 +476,33 @@ curl http://<EXTERNAL-IP>`
             }
         };
 
-        document.addEventListener('DOMContentLoaded', function () {
-            mermaid.initialize({
-                startOnLoad: true,
-                theme: 'neutral',
-                securityLevel: 'loose',
-                flowchart: {
-                    htmlLabels: true,
-                    curve: 'basis',
-                    useMaxWidth: false
-                }
-            });
-
-            setTimeout(bindMermaidClicks, 600);
+        // 1. 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'neutral',
+            securityLevel: 'loose',
+            flowchart: {
+                htmlLabels: true,
+                curve: 'basis',
+                useMaxWidth: false
+            }
         });
 
-        function bindMermaidClicks() {
-            const svgNodes = document.querySelectorAll('.mermaid svg .node');
-            
-            svgNodes.forEach(node => {
-                node.style.cursor = 'pointer';
-                node.addEventListener('click', function(e) {
-                    e.stopPropagation();
-                    const text = this.textContent || '';
-                    const id = this.id || '';
-                    handleNodeClick(id, text);
+        // 2. 改用事件委派監聽：直接在最外層 container 監聽，完全不怕 SVG 渲染延遲
+        document.addEventListener('DOMContentLoaded', function () {
+            const container = document.getElementById('diagram-container');
+            if (container) {
+                container.addEventListener('click', function(e) {
+                    const node = e.target.closest('.node');
+                    if (node) {
+                        e.stopPropagation();
+                        const text = node.textContent || '';
+                        const id = node.id || '';
+                        handleNodeClick(id, text);
+                    }
                 });
-            });
-        }
+            }
+        });
 
         function handleNodeClick(rawId, textContent) {
             const query = (rawId + ' ' + textContent).toLowerCase();
@@ -562,14 +561,12 @@ curl http://<EXTERNAL-IP>`
             document.getElementById('modalDesc').innerText = data.desc;
             document.getElementById('modalWhy').innerText = data.why;
 
-            // 重設代碼展開/收合狀態，預設為收合，讓使用者自主決定
             isCodeExpanded = false;
             document.getElementById('codeContentArea').classList.add('hidden');
             document.getElementById('copyCodeBtn').classList.add('hidden');
             document.getElementById('toggleCodeIcon').innerText = '▶';
             document.getElementById('toggleCodeText').innerText = '展開實作指令 / 配置設定';
 
-            // 若該節點有指令/配置代碼則顯示區塊，無代碼則完全隱藏
             if (data.code && data.code.trim() !== '') {
                 codeContainerWrapper.classList.remove('hidden');
                 document.getElementById('modalCode').innerText = data.code;
@@ -579,7 +576,6 @@ curl http://<EXTERNAL-IP>`
                 currentModalCode = '';
             }
 
-            // 鎖定背景滾動，並以居中動效彈出
             document.body.style.overflow = 'hidden';
             backdrop.classList.remove('hidden');
             modal.classList.remove('hidden');
